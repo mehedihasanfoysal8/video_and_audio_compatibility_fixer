@@ -93,3 +93,4 @@ To allow your browser to launch your local desktop VLC Media Player directly whe
 
 ## 📜 License
 MIT License. Free for personal and educational use.
+
