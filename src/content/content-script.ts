@@ -380,7 +380,32 @@ function detectSingleMovie(): SingleMovieData | null {
 let isFloatingDismissed = false;
 let lastPageUrl = typeof window !== 'undefined' ? window.location.href : '';
 
+function isBlockedSite(): boolean {
+  try {
+    const host = window.location.hostname.toLowerCase();
+    const blocked = [
+      'youtube.com',
+      'youtu.be',
+      'facebook.com',
+      'fb.com',
+      'fb.watch',
+      'messenger.com',
+    ];
+    return blocked.some((b) => host === b || host.endsWith('.' + b));
+  } catch {
+    return false;
+  }
+}
+
 function injectFloatingButton() {
+  if (isBlockedSite()) {
+    const existing = document.getElementById('uvp-floating-trigger');
+    if (existing) existing.remove();
+    const toolbar = document.getElementById('uvp-inpage-toolbar');
+    if (toolbar) toolbar.remove();
+    return;
+  }
+
   if (typeof window !== 'undefined' && window.location.href !== lastPageUrl) {
     lastPageUrl = window.location.href;
     isFloatingDismissed = false;
@@ -628,26 +653,21 @@ function injectInPageMovieToolbar(episode: Episode, title: string) {
   }
 }
 
-// Run immediately & on events
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', injectFloatingButton);
-} else {
-  injectFloatingButton();
-}
+// Run immediately & on events (permanently disabled on YouTube, Facebook, etc.)
+if (!isBlockedSite()) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectFloatingButton);
+  } else {
+    injectFloatingButton();
+  }
 
-window.addEventListener('load', injectFloatingButton);
-window.addEventListener('popstate', () => {
-  if (typeof window !== 'undefined' && window.location.href !== lastPageUrl) {
-    lastPageUrl = window.location.href;
-    isFloatingDismissed = false;
-    injectFloatingButton();
-  }
-});
-window.addEventListener('yt-navigate-finish', () => {
-  if (typeof window !== 'undefined' && window.location.href !== lastPageUrl) {
-    lastPageUrl = window.location.href;
-    isFloatingDismissed = false;
-    injectFloatingButton();
-  }
-});
-setInterval(injectFloatingButton, 1500);
+  window.addEventListener('load', injectFloatingButton);
+  window.addEventListener('popstate', () => {
+    if (typeof window !== 'undefined' && window.location.href !== lastPageUrl) {
+      lastPageUrl = window.location.href;
+      isFloatingDismissed = false;
+      injectFloatingButton();
+    }
+  });
+  setInterval(injectFloatingButton, 1500);
+}
