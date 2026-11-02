@@ -377,7 +377,21 @@ function detectSingleMovie(): SingleMovieData | null {
 }
 
 // ─── Floating Button on Series & Single Movie Pages ───────────────────────────
+let isFloatingDismissed = false;
+let lastPageUrl = typeof window !== 'undefined' ? window.location.href : '';
+
 function injectFloatingButton() {
+  if (typeof window !== 'undefined' && window.location.href !== lastPageUrl) {
+    lastPageUrl = window.location.href;
+    isFloatingDismissed = false;
+  }
+
+  if (isFloatingDismissed) {
+    const existing = document.getElementById('uvp-floating-trigger');
+    if (existing) existing.remove();
+    return;
+  }
+
   const data = parseCirclePage();
   if (!data || data.seasons.length === 0 || !data.seasons[0].episodes[0]) return;
 
@@ -385,48 +399,104 @@ function injectFloatingButton() {
   const label = isMovie ? 'Open in Universal Player (Fix Audio)' : 'Open Series Player';
 
   let btn = document.getElementById('uvp-floating-trigger');
-  if (!btn) {
-    btn = document.createElement('div');
-    btn.id = 'uvp-floating-trigger';
-    btn.style.cssText = `
-      position: fixed !important;
-      bottom: 30px !important;
-      right: 30px !important;
-      z-index: 2147483647 !important;
-      background: linear-gradient(135deg, #ff9800, #e65100) !important;
-      color: #ffffff !important;
-      padding: 14px 24px !important;
-      border-radius: 50px !important;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,255,255,0.4) !important;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-      font-size: 15px !important;
-      font-weight: 700 !important;
-      cursor: pointer !important;
-      display: flex !important;
-      align-items: center !important;
-      gap: 10px !important;
-      transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-      user-select: none !important;
-    `;
-    btn.onmouseenter = () => { if (btn) btn.style.transform = 'scale(1.06)'; };
-    btn.onmouseleave = () => { if (btn) btn.style.transform = 'scale(1)'; };
-    document.body.appendChild(btn);
+  if (btn) return; // Already injected and active
+
+  btn = document.createElement('div');
+  btn.id = 'uvp-floating-trigger';
+  btn.style.cssText = `
+    position: fixed !important;
+    bottom: 30px !important;
+    right: 30px !important;
+    z-index: 2147483647 !important;
+    background: linear-gradient(135deg, #ff9800, #e65100) !important;
+    color: #ffffff !important;
+    padding: 10px 14px 10px 20px !important;
+    border-radius: 50px !important;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6), 0 0 0 2px rgba(255,255,255,0.4) !important;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease !important;
+    user-select: none !important;
+  `;
+
+  btn.innerHTML = `
+    <div id="uvp-floating-action" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+      <span style="font-size: 18px; line-height: 1;">▶</span>
+      <span id="uvp-floating-label">${label}</span>
+    </div>
+    <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.35); margin: 0 2px;"></div>
+    <div id="uvp-floating-close" title="Dismiss" role="button" tabindex="0" style="
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      cursor: pointer;
+      background: rgba(0, 0, 0, 0.2);
+      font-size: 13px;
+      line-height: 1;
+      font-weight: bold;
+      color: #ffffff;
+      transition: background 0.2s ease, transform 0.15s ease;
+    ">✕</div>
+  `;
+
+  const actionEl = btn.querySelector('#uvp-floating-action') as HTMLElement;
+  const labelEl = btn.querySelector('#uvp-floating-label') as HTMLElement;
+  if (actionEl) {
+    actionEl.onclick = (e) => {
+      e.stopPropagation();
+      if (labelEl) labelEl.textContent = 'Opening Player…';
+      chrome.runtime.sendMessage({
+        type: 'OPEN_PLAYER',
+        payload: { mode: 'series', series: data, episode: data.seasons[0].episodes[0] },
+      });
+      setTimeout(() => {
+        if (labelEl) labelEl.textContent = label;
+      }, 2500);
+    };
   }
 
-  btn.innerHTML = `<span style="font-size:20px; line-height: 1;">▶</span> <span>${label}</span>`;
-  btn.onclick = () => {
-    btn!.innerHTML = `<span style="font-size:20px; line-height: 1;">⏳</span> <span>Opening Player…</span>`;
-    chrome.runtime.sendMessage({
-      type: 'OPEN_PLAYER',
-      payload: { mode: 'series', series: data, episode: data.seasons[0].episodes[0] },
-    });
-    setTimeout(() => {
-      if (btn) btn.innerHTML = `<span style="font-size:20px; line-height: 1;">▶</span> <span>${label}</span>`;
-    }, 2500);
+  const closeEl = btn.querySelector('#uvp-floating-close') as HTMLElement;
+  if (closeEl) {
+    closeEl.onmouseenter = () => {
+      closeEl.style.background = 'rgba(0, 0, 0, 0.55)';
+      closeEl.style.transform = 'scale(1.15)';
+    };
+    closeEl.onmouseleave = () => {
+      closeEl.style.background = 'rgba(0, 0, 0, 0.2)';
+      closeEl.style.transform = 'scale(1)';
+    };
+    closeEl.onclick = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      isFloatingDismissed = true;
+      if (btn) {
+        btn.style.opacity = '0';
+        btn.style.transform = 'scale(0.85)';
+        setTimeout(() => {
+          btn?.remove();
+        }, 200);
+      }
+    };
+  }
+
+  btn.onmouseenter = (e) => {
+    if (btn && e.target !== closeEl) btn.style.transform = 'scale(1.04)';
+  };
+  btn.onmouseleave = () => {
+    if (btn) btn.style.transform = 'scale(1)';
   };
 
-  // If on a single movie page, also inject in-page toolbar directly near the player
-  if (isMovie) {
+  document.body.appendChild(btn);
+
+  // If on a single movie page, also inject in-page toolbar directly near the player (only for real media links)
+  if (isMovie && (!data.seasons[0].episodes[0].playUrl || !data.seasons[0].episodes[0].playUrl.startsWith('blob:'))) {
     injectInPageMovieToolbar(data.seasons[0].episodes[0], data.title);
   }
 }
@@ -566,4 +636,18 @@ if (document.readyState === 'loading') {
 }
 
 window.addEventListener('load', injectFloatingButton);
+window.addEventListener('popstate', () => {
+  if (typeof window !== 'undefined' && window.location.href !== lastPageUrl) {
+    lastPageUrl = window.location.href;
+    isFloatingDismissed = false;
+    injectFloatingButton();
+  }
+});
+window.addEventListener('yt-navigate-finish', () => {
+  if (typeof window !== 'undefined' && window.location.href !== lastPageUrl) {
+    lastPageUrl = window.location.href;
+    isFloatingDismissed = false;
+    injectFloatingButton();
+  }
+});
 setInterval(injectFloatingButton, 1500);
